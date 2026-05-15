@@ -1,0 +1,209 @@
+import internal:Internal 
+    ( replicateArray
+    , unsafeMutableArrayContents
+    , mutableArrayLength
+    , unsafeReadMutableArray
+    , unsafeWriteMutableArray
+    , unsafeFreezeArray
+    )
+import std:IO/Posix/FileDescriptor (FileDescriptor)
+import std:IO/Posix (print)
+import std:Array (copyMutableArray, fromList)
+import std:String (append, unsafeFromByteArraySlice, take, drop, length, concatList, findByteIndex, findByteIndexWhere)
+import std:List (List, Nil, Cons, reverse, for)
+import std:Maybe (Maybe, Just, Nothing)
+import meridian:Socket (Socket)
+import meridian:Request (Request)
+import internal:Internal (uint8ToInt, debugInt)
+
+data Parser = Parser({
+    fileDescriptor : FileDescriptor,
+    buffer : MutableArray(UInt8),
+    -- This is basically an IORef
+    bufferSize : MutableArray(Int),
+    bufferIndex : MutableArray(Int)
+})
+
+makeParser : Socket -> Parser
+makeParser(Socket(fileDescriptor)) = {
+    let buffer = replicateArray(4096, 0u8)
+    let bufferSize = replicateArray(1, 0)
+    let bufferIndex = replicateArray(1, 0)
+
+    Parser({
+        fileDescriptor = fileDescriptor,
+        buffer = buffer,
+        bufferSize = bufferSize,
+        bufferIndex = bufferIndex
+    })
+}
+
+external read : (Int32, Pointer(UInt8), Int) -> Int
+
+data PossibleEOF = EOF | NonEOF
+
+refill : Parser -> PossibleEOF
+refill(Parser({fileDescriptor, buffer, bufferSize, bufferIndex})) = {
+    let FileDescriptor(fdInt) = fileDescriptor
+    let amountFilled = read(fdInt, unsafeMutableArrayContents(buffer), mutableArrayLength(buffer))
+    unsafeWriteMutableArray(bufferSize, 0, amountFilled)
+    unsafeWriteMutableArray(bufferIndex, 0, 0)
+    
+    if amountFilled == 0 then
+        EOF
+    else 
+        NonEOF
+}
+
+advance : (Parser, Int) -> ()
+advance(Parser({fileDescriptor, buffer, bufferSize, bufferIndex}) as parser, amount) = {
+    let currentIndex = unsafeReadMutableArray(bufferIndex, 0)
+    let currentSize = unsafeReadMutableArray(bufferSize, 0)
+    if currentIndex + amount > currentSize then {
+        match refill(parser) {
+            EOF -> ()
+            NonEOF -> advance(parser, amount - (currentSize - currentIndex))
+        }
+    } else {
+        unsafeWriteMutableArray(bufferIndex, 0, currentIndex + amount)
+    }
+}
+
+peekRemainingAsString : Parser -> String
+peekRemainingAsString(Parser({fileDescriptor, buffer, bufferSize, bufferIndex})) = {
+    let size = unsafeReadMutableArray(bufferSize, 0)
+    let index = unsafeReadMutableArray(bufferIndex, 0)
+    let copiedLength = size - index
+    let newArray = replicateArray(copiedLength, 0u8)
+    copyMutableArray({ 
+            targetArray = newArray, 
+            targetOffset = 0, 
+            sourceArray = buffer,
+            sourceOffset = index, 
+            length = copiedLength
+        })
+    unsafeFromByteArraySlice({ content = unsafeFreezeArray(newArray), offset = 0, length = copiedLength })
+}
+
+-- Parse until hitting a character matching the condition.
+-- Afterwards, this character is the first character pointed at by the parser
+-- and is *not* included in the returned array
+
+parseUntil : (Parser, UInt8 -> Bool) -> String
+parseUntil(parser, condition) = {
+
+    let go(parsedChunks) = {
+        let currentString = peekRemainingAsString(parser)
+        match findByteIndexWhere(currentString, condition) {
+            Nothing -> match refill(parser) {
+                -- TODO: this should actually throw an error
+
+                EOF -> Cons(currentString, parsedChunks)
+                NonEOF -> go(Cons(currentString, parsedChunks))
+            }
+            Just(index) -> {
+                let chunk = take(currentString, index)
+                advance(parser, index)
+                Cons(chunk, parsedChunks)
+            }
+        }
+    }
+    let parsedChunks = go(Nil)
+    concatList(reverse(parsedChunks))
+}
+
+discardUntil : (Parser, UInt8 -> Bool) -> ()
+discardUntil(parser, condition) = {
+    let go() = {
+        let currentString = peekRemainingAsString(parser)
+        match findByteIndexWhere(currentString, condition) {
+            Nothing -> match refill(parser) {
+                EOF -> ()
+                NonEOF -> go()
+            }
+            Just(index) -> {
+                advance(parser, index)
+            }
+        }
+    }
+    go()
+}
+
+parseUntilSpace : (Parser) -> String
+parseUntilSpace(parser) = {
+    parseUntil(parser, \char -> uint8ToInt(char) == 32)
+}
+
+parseUntilNewline : (Parser) -> String
+parseUntilNewline(parser) = {
+    parseUntil(parser, \char -> uint8ToInt(char) == 10)
+}
+
+parseUntilEOF : Parser -> String
+parseUntilEOF(parser) = {
+    parseUntil(parser, \_ -> False)
+}
+
+discardUntilNewline : Parser -> ()
+discardUntilNewline(parser) = {
+    discardUntil(parser, \char -> uint8ToInt(char) == 10)
+}
+
+discardSpaces : (Parser) -> ()
+discardSpaces(parser) = {
+    discardUntil(parser, \char -> uint8ToInt(char) != 32)
+}
+
+parseHeader : Parser -> Maybe({ key : String, value : String })
+parseHeader(parser) = {
+    let line = parseUntilNewline(parser)
+    if (length(line) == 0) then {
+        Nothing
+    -- 58 = ':'
+
+    } else match findByteIndex(58u8, line) {
+        Nothing -> {
+            -- This should really be an error but i guess we can just stop parsing here?
+
+            Nothing
+        }
+        Just(index) -> {
+            let key = take(line, index)
+            -- This drops an additional value to drop the space after the :.
+            -- This assumes that headers always have the form 'KEY: VALUE' with exactly one space.
+            -- I don't think this is actually correct but it works for firefox sooo
+
+            let value = drop(line, index + 1)
+            Just({ key = key, value = value })
+        }
+    }
+}
+
+
+parseRequest : Parser -> Request
+parseRequest(parser) = {
+    let method = parseUntilSpace(parser)
+    discardSpaces(parser)
+    let path = parseUntilSpace(parser)
+    -- There is technically supposed to be an "HTTP/1.1" or "HTTP/1.2" here
+    -- but we don't actually have a nice way of handling parse errors yet so ehhh it's probably fine
+    
+    discardUntilNewline(parser)
+
+    let parseHeaders(foundSoFar) = match parseHeader(parser) {
+        Nothing -> reverse(foundSoFar)
+        Just(header) -> parseHeaders(Cons(header, foundSoFar))
+    }
+    let headers = fromList(parseHeaders(Nil))
+
+    -- TODO
+
+    let body = ""
+
+    Request({
+        method = method,
+        path = path,
+        headers = headers,
+        body = body
+    })
+}

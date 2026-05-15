@@ -1,0 +1,78 @@
+
+import internal:Internal (unsafeFreezeArray, replicateArray, unsafeWriteMutableArray, unsafeArrayContents, nullPointer)
+import std:IO/Posix/FileDescriptor (FileDescriptor)
+
+import meridian:Socket/Raw (socket, bind, listenRaw, acceptRaw, closeRaw)
+import meridian:Error (handleNegative, handleNonZeroErrno, handleNegativeErrno)
+import meridian:ByteOrder (toNetworkBO16U)
+
+data Socket = Socket(FileDescriptor)
+
+createTCP : () -> Socket
+createTCP() = {
+    let _AF_INET = 2i32
+    let _SOCK_STREAM = 1i32
+    let protocol = 0i32
+
+    let fd = handleNegative("socket", socket(_AF_INET, _SOCK_STREAM, protocol))
+    Socket(FileDescriptor(fd))
+}
+
+-- Horrible workaround for our slightly limited FFI capabilities around structs
+-- This corresponds to the C struct.
+--  struct sockaddr_in {
+--      int16_t sin_family (always AF_INET = 2)
+--      int16_t sin_port
+--      int32_t sin_addr
+--      char padding[8]
+--  }
+
+data INAddress = INAddress(Array(UInt16))
+
+makeINAnyAddress : UInt16 -> INAddress
+makeINAnyAddress(port) = {
+    -- sockaddr_in is 16 bytes so we need 8 UInt16s
+    -- We initialize this to zeroes so taht sin_addr is zero
+    -- and we don't just need to deal with 16 bit values
+
+    let array = replicateArray(8, 0u16)
+    -- This is always AF_INET = 2.
+
+    unsafeWriteMutableArray(array, 0, 2u16)
+    unsafeWriteMutableArray(array, 1, toNetworkBO16U(port))
+    -- the rest should stay 0
+
+    INAddress(unsafeFreezeArray(array))
+}
+
+withINAddress : forall r. (INAddress, Pointer(UInt16) -> r) -> r
+withINAddress(INAddress(array), cont) = {
+    cont(unsafeArrayContents(array))
+}
+
+addressSize : () -> Int32
+addressSize() = 16i32
+
+bindTCP : (Socket, UInt16) -> ()
+bindTCP(Socket(FileDescriptor(fd)), port) = {
+    let address = makeINAnyAddress(port)
+
+    withINAddress(address, \addressPointer -> {
+        handleNonZeroErrno("bind", bind(fd, addressPointer, addressSize()))
+    })
+} 
+
+listen : (Socket, Int32) -> ()
+listen(Socket(FileDescriptor(fd)), backlog) = {
+    handleNonZeroErrno("listen", listenRaw(fd, backlog))
+}
+
+accept : Socket -> Socket
+accept(Socket(FileDescriptor(fd))) = {
+    Socket(FileDescriptor(handleNegativeErrno("accept", acceptRaw(fd, nullPointer(), nullPointer()))))
+}
+
+close : FileDescriptor -> ()
+close(FileDescriptor(fd)) = {
+    handleNonZeroErrno("close", closeRaw(fd))
+}

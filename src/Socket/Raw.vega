@@ -1,0 +1,10 @@
+
+external socket : (Int32, Int32, Int32) -> Int32
+
+external bind : (Int32, Pointer(UInt16), Int32) -> Int32
+
+external listenRaw : (Int32, Int32) -> Int32 = "listen"
+
+external acceptRaw : (Int32, Pointer(UInt16), Pointer(Int32)) -> Int32 = "accept"
+
+external closeRaw : (Int32) -> Int32 = "close"

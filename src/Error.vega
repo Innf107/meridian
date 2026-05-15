@@ -1,0 +1,49 @@
+
+import std:IO/Posix/FileDescriptor (stderr)
+import std:IO/Posix (printFD)
+import std:String (append)
+
+import internal:Internal (debugInt, int32ToInt, intToInt32, errno)
+
+external exit : Int32 -> ()
+
+fatalError : String -> ()
+fatalError(message) = {
+    printFD(stderr(), append(append("\e[1m\e[31mFATAL ERROR: ", message), "\e[0m"))
+    exit(1i32)
+}
+
+
+
+handleNegative : (String, Int32) -> Int32
+handleNegative(operation, valueOrErrorCode) = {
+    if int32ToInt(valueOrErrorCode) < 0 then {
+        printFD(stderr(), append(append("\e[1m\e[31mFATAL ERROR: ", operation), " failed\e[0m"))
+        -- ouch 
+
+        exit(intToInt32(0 - int32ToInt(valueOrErrorCode)))
+        valueOrErrorCode
+    } else {
+        valueOrErrorCode
+    }
+}
+
+handleNonZeroErrno : (String, Int32) -> ()
+handleNonZeroErrno(operation, result) = {
+    if int32ToInt(result) != 0 then {
+        printFD(stderr(), append(append("\e[1m\e[31mFATAL ERROR: ", operation), " failed\e[0m"))
+        exit(errno())
+    } else {}
+}
+
+handleNegativeErrno : (String, Int32) -> Int32
+handleNegativeErrno(operation, result) = {
+    if int32ToInt(result) < 0 then {
+        printFD(stderr(), append(append("\e[1m\e[31mFATAL ERROR: ", operation), " failed\e[0m"))
+        exit(errno())
+        result
+    } else {
+        result
+    }
+}
+

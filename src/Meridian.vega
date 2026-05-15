@@ -1,0 +1,43 @@
+import internal:Internal (intToInt32, emptyArray)
+import std:IO/Posix/FileDescriptor (stderr)
+import std:IO/Posix (print, printFD)
+import std:String (append)
+
+import meridian:Error (fatalError, handleNegative)
+import meridian:Socket (Socket, createTCP, bindTCP, listen, accept)
+import meridian:Parser (makeParser, parseRequest)
+import meridian:Request (Request)
+import meridian:Response (Response, sendResponse)
+import meridian:Meridian (run)
+
+
+run : ({ port : UInt16, onRequest : Request -> Response }) -> ()
+run({ port, onRequest }) = {
+    let socket = createTCP()
+    bindTCP(socket, port)
+
+    let backlog = 128i32
+    listen(socket, backlog)
+    printFD(stderr(), "listening on port 3000")
+
+    let loop() = {
+        let connectionSocket = accept(socket)
+        printFD(stderr(), "received a connection")
+        handleConnection(connectionSocket, onRequest)
+        printFD(stderr(), "connection handled")
+        loop()
+    }
+    loop()
+}
+
+handleConnection : (Socket, Request -> Response) -> ()
+handleConnection(socket, onRequest) = {
+    let parser = makeParser(socket)
+    let request = parseRequest(parser)
+    let Request({method, path, headers, body}) = request
+    print(append(append(method, " "), path))
+
+    let response = onRequest(request)
+
+    sendResponse(socket, response)
+}

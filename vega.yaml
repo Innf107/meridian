@@ -1,0 +1,5 @@
+name: "meridian"
+backend: release
+dependencies: [
+  { type: local, src: "../vega-graph/std" }
+]

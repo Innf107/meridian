@@ -1,0 +1,33 @@
+import std:IO/Posix (writeString)
+import std:Int (toString)
+import meridian:Socket (Socket, close)
+import std:Array (for)
+
+data Response = Response({
+    headers : Array({ key : String, value : String }),
+    status : Int,
+    statusMessage : String,
+    contentType : String,
+    body : String
+})
+
+sendResponse : (Socket, Response) -> ()
+sendResponse(Socket(fd), Response({headers, status, statusMessage, contentType, body})) = {
+    writeString(fd, "HTTP/1.1 ")
+    writeString(fd, toString(status))
+    writeString(fd, " ")
+    writeString(fd, statusMessage)
+    writeString(fd, "\nContent-Type: ")
+    writeString(fd, contentType)
+    writeString(fd, "\n")
+    
+    for(headers, \{key, value} -> {
+        writeString(fd, key)
+        writeString(fd, ", ")
+        writeString(fd, value)
+        writeString(fd, "\n")
+    })
+    writeString(fd, "\n")
+    writeString(fd, body)
+    close(fd)
+}
