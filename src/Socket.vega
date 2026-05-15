@@ -2,7 +2,7 @@
 import internal:Internal (unsafeFreezeArray, replicateArray, unsafeWriteMutableArray, unsafeArrayContents, nullPointer)
 import std:IO/Posix/FileDescriptor (FileDescriptor)
 
-import meridian:Socket/Raw (socket, bind, listenRaw, acceptRaw, closeRaw)
+import meridian:Socket/Raw as Raw
 import meridian:Error (handleNegative, handleNonZeroErrno, handleNegativeErrno)
 import meridian:ByteOrder (toNetworkBO16U)
 
@@ -14,7 +14,7 @@ createTCP() = {
     let _SOCK_STREAM = 1i32
     let protocol = 0i32
 
-    let fd = handleNegative("socket", socket(_AF_INET, _SOCK_STREAM, protocol))
+    let fd = handleNegative("socket", Raw.socket(_AF_INET, _SOCK_STREAM, protocol))
     Socket(FileDescriptor(fd))
 }
 
@@ -58,21 +58,21 @@ bindTCP(Socket(FileDescriptor(fd)), port) = {
     let address = makeINAnyAddress(port)
 
     withINAddress(address, \addressPointer -> {
-        handleNonZeroErrno("bind", bind(fd, addressPointer, addressSize()))
+        handleNonZeroErrno("bind", Raw.bind(fd, addressPointer, addressSize()))
     })
 } 
 
 listen : (Socket, Int32) -> ()
 listen(Socket(FileDescriptor(fd)), backlog) = {
-    handleNonZeroErrno("listen", listenRaw(fd, backlog))
+    handleNonZeroErrno("listen", Raw.listen(fd, backlog))
 }
 
 accept : Socket -> Socket
 accept(Socket(FileDescriptor(fd))) = {
-    Socket(FileDescriptor(handleNegativeErrno("accept", acceptRaw(fd, nullPointer(), nullPointer()))))
+    Socket(FileDescriptor(handleNegativeErrno("accept", Raw.accept(fd, nullPointer(), nullPointer()))))
 }
 
 close : FileDescriptor -> ()
 close(FileDescriptor(fd)) = {
-    handleNonZeroErrno("close", closeRaw(fd))
+    handleNonZeroErrno("close", Raw.close(fd))
 }

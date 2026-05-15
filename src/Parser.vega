@@ -8,9 +8,11 @@ import internal:Internal
     )
 import std:IO/Posix/FileDescriptor (FileDescriptor)
 import std:IO/Posix (print)
-import std:Array (copyMutableArray, fromList)
-import std:String (append, unsafeFromByteArraySlice, take, drop, length, concatList, findByteIndex, findByteIndexWhere)
-import std:List (List, Nil, Cons, reverse, for)
+import std:Array (copyMutableArray)
+import std:Array
+import std:String
+import std:List (List, Nil, Cons)
+import std:List
 import std:Maybe (Maybe, Just, Nothing)
 import meridian:Socket (Socket)
 import meridian:Request (Request)
@@ -82,7 +84,7 @@ peekRemainingAsString(Parser({fileDescriptor, buffer, bufferSize, bufferIndex}))
             sourceOffset = index, 
             length = copiedLength
         })
-    unsafeFromByteArraySlice({ content = unsafeFreezeArray(newArray), offset = 0, length = copiedLength })
+    String.unsafeFromByteArraySlice({ content = unsafeFreezeArray(newArray), offset = 0, length = copiedLength })
 }
 
 -- Parse until hitting a character matching the condition.
@@ -94,7 +96,7 @@ parseUntil(parser, condition) = {
 
     let go(parsedChunks) = {
         let currentString = peekRemainingAsString(parser)
-        match findByteIndexWhere(currentString, condition) {
+        match String.findByteIndexWhere(currentString, condition) {
             Nothing -> match refill(parser) {
                 -- TODO: this should actually throw an error
 
@@ -102,21 +104,21 @@ parseUntil(parser, condition) = {
                 NonEOF -> go(Cons(currentString, parsedChunks))
             }
             Just(index) -> {
-                let chunk = take(currentString, index)
+                let chunk = String.take(currentString, index)
                 advance(parser, index)
                 Cons(chunk, parsedChunks)
             }
         }
     }
     let parsedChunks = go(Nil)
-    concatList(reverse(parsedChunks))
+    String.concatList(List.reverse(parsedChunks))
 }
 
 discardUntil : (Parser, UInt8 -> Bool) -> ()
 discardUntil(parser, condition) = {
     let go() = {
         let currentString = peekRemainingAsString(parser)
-        match findByteIndexWhere(currentString, condition) {
+        match String.findByteIndexWhere(currentString, condition) {
             Nothing -> match refill(parser) {
                 EOF -> ()
                 NonEOF -> go()
@@ -157,23 +159,23 @@ discardSpaces(parser) = {
 parseHeader : Parser -> Maybe({ key : String, value : String })
 parseHeader(parser) = {
     let line = parseUntilNewline(parser)
-    if (length(line) == 0) then {
+    if (String.length(line) == 0) then {
         Nothing
     -- 58 = ':'
 
-    } else match findByteIndex(58u8, line) {
+    } else match String.findByteIndex(58u8, line) {
         Nothing -> {
             -- This should really be an error but i guess we can just stop parsing here?
 
             Nothing
         }
         Just(index) -> {
-            let key = take(line, index)
+            let key = String.take(line, index)
             -- This drops an additional value to drop the space after the :.
             -- This assumes that headers always have the form 'KEY: VALUE' with exactly one space.
             -- I don't think this is actually correct but it works for firefox sooo
 
-            let value = drop(line, index + 1)
+            let value = String.drop(line, index + 1)
             Just({ key = key, value = value })
         }
     }
@@ -191,10 +193,10 @@ parseRequest(parser) = {
     discardUntilNewline(parser)
 
     let parseHeaders(foundSoFar) = match parseHeader(parser) {
-        Nothing -> reverse(foundSoFar)
+        Nothing -> List.reverse(foundSoFar)
         Just(header) -> parseHeaders(Cons(header, foundSoFar))
     }
-    let headers = fromList(parseHeaders(Nil))
+    let headers = Array.fromList(parseHeaders(Nil))
 
     -- TODO
 

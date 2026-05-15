@@ -8,11 +8,11 @@ import meridian:Socket (Socket, createTCP, bindTCP, listen, accept)
 import meridian:Parser (makeParser, parseRequest)
 import meridian:Request (Request)
 import meridian:Response (Response, sendResponse)
-import meridian:Meridian (run)
+import meridian:Meridian
 
 main : () -> ()
 main() = {
-    run({ 
+    Meridian.run({ 
         port = 3000u16, 
         onRequest = \request -> {
             Response({

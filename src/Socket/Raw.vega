@@ -3,8 +3,8 @@ external socket : (Int32, Int32, Int32) -> Int32
 
 external bind : (Int32, Pointer(UInt16), Int32) -> Int32
 
-external listenRaw : (Int32, Int32) -> Int32 = "listen"
+external listen : (Int32, Int32) -> Int32
 
-external acceptRaw : (Int32, Pointer(UInt16), Pointer(Int32)) -> Int32 = "accept"
+external accept : (Int32, Pointer(UInt16), Pointer(Int32)) -> Int32
 
-external closeRaw : (Int32) -> Int32 = "close"
+external close : (Int32) -> Int32

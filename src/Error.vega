@@ -13,8 +13,6 @@ fatalError(message) = {
     exit(1i32)
 }
 
-
-
 handleNegative : (String, Int32) -> Int32
 handleNegative(operation, valueOrErrorCode) = {
     if int32ToInt(valueOrErrorCode) < 0 then {

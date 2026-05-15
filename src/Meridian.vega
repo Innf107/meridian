@@ -1,7 +1,7 @@
 import internal:Internal (intToInt32, emptyArray)
 import std:IO/Posix/FileDescriptor (stderr)
 import std:IO/Posix (print, printFD)
-import std:String (append)
+import std:String
 
 import meridian:Error (fatalError, handleNegative)
 import meridian:Socket (Socket, createTCP, bindTCP, listen, accept)
@@ -35,7 +35,7 @@ handleConnection(socket, onRequest) = {
     let parser = makeParser(socket)
     let request = parseRequest(parser)
     let Request({method, path, headers, body}) = request
-    print(append(append(method, " "), path))
+    print(String.append(String.append(method, " "), path))
 
     let response = onRequest(request)
 
