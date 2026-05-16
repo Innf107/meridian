@@ -90,7 +90,6 @@ peekRemainingAsString(Parser({fileDescriptor, buffer, bufferSize, bufferIndex}))
 -- Parse until hitting a character matching the condition.
 -- Afterwards, this character is the first character pointed at by the parser
 -- and is *not* included in the returned array
-
 parseUntil : (Parser, UInt8 -> Bool) -> String
 parseUntil(parser, condition) = {
 
@@ -99,7 +98,6 @@ parseUntil(parser, condition) = {
         match String.findByteIndexWhere(currentString, condition) {
             Nothing -> match refill(parser) {
                 -- TODO: this should actually throw an error
-
                 EOF -> Cons(currentString, parsedChunks)
                 NonEOF -> go(Cons(currentString, parsedChunks))
             }
@@ -162,19 +160,17 @@ parseHeader(parser) = {
     if (String.length(line) == 0) then {
         Nothing
     -- 58 = ':'
-
     } else match String.findByteIndex(58u8, line) {
         Nothing -> {
             -- This should really be an error but i guess we can just stop parsing here?
-
             Nothing
         }
         Just(index) -> {
             let key = String.take(line, index)
+
             -- This drops an additional value to drop the space after the :.
             -- This assumes that headers always have the form 'KEY: VALUE' with exactly one space.
             -- I don't think this is actually correct but it works for firefox sooo
-
             let value = String.drop(line, index + 1)
             Just({ key = key, value = value })
         }
@@ -187,9 +183,9 @@ parseRequest(parser) = {
     let method = parseUntilSpace(parser)
     discardSpaces(parser)
     let path = parseUntilSpace(parser)
+
     -- There is technically supposed to be an "HTTP/1.1" or "HTTP/1.2" here
     -- but we don't actually have a nice way of handling parse errors yet so ehhh it's probably fine
-    
     discardUntilNewline(parser)
 
     let parseHeaders(foundSoFar) = match parseHeader(parser) {
@@ -199,7 +195,6 @@ parseRequest(parser) = {
     let headers = Array.fromList(parseHeaders(Nil))
 
     -- TODO
-
     let body = ""
 
     Request({

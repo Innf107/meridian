@@ -18,7 +18,6 @@ handleNegative(operation, valueOrErrorCode) = {
     if int32ToInt(valueOrErrorCode) < 0 then {
         printFD(stderr(), append(append("\e[1m\e[31mFATAL ERROR: ", operation), " failed\e[0m"))
         -- ouch 
-
         exit(intToInt32(0 - int32ToInt(valueOrErrorCode)))
         valueOrErrorCode
     } else {
