@@ -1,5 +1,5 @@
 import internal:Internal 
-    ( replicateArray
+    ( replicateMutableArray
     , unsafeMutableArrayContents
     , mutableArrayLength
     , unsafeReadMutableArray
@@ -14,6 +14,8 @@ import std:String
 import std:List (List, Nil, Cons)
 import std:List
 import std:Maybe (Maybe, Just, Nothing)
+import std:Ref (Ref)
+import std:Ref
 import meridian:Socket (Socket)
 import meridian:Request (Request)
 import internal:Internal (uint8ToInt, debugInt)
@@ -21,16 +23,15 @@ import internal:Internal (uint8ToInt, debugInt)
 data Parser = Parser({
     fileDescriptor : FileDescriptor,
     buffer : MutableArray(UInt8),
-    -- This is basically an IORef
-    bufferSize : MutableArray(Int),
-    bufferIndex : MutableArray(Int)
+    bufferSize : Ref(Int),
+    bufferIndex : Ref(Int)
 })
 
 makeParser : Socket -> Parser
 makeParser(Socket(fileDescriptor)) = {
-    let buffer = replicateArray(4096, 0u8)
-    let bufferSize = replicateArray(1, 0)
-    let bufferIndex = replicateArray(1, 0)
+    let buffer = replicateMutableArray(4096, 0u8)
+    let bufferSize = Ref.new(0)
+    let bufferIndex = Ref.new(0)
 
     Parser({
         fileDescriptor = fileDescriptor,
@@ -48,8 +49,8 @@ refill : Parser -> PossibleEOF
 refill(Parser({fileDescriptor, buffer, bufferSize, bufferIndex})) = {
     let FileDescriptor(fdInt) = fileDescriptor
     let amountFilled = read(fdInt, unsafeMutableArrayContents(buffer), mutableArrayLength(buffer))
-    unsafeWriteMutableArray(bufferSize, 0, amountFilled)
-    unsafeWriteMutableArray(bufferIndex, 0, 0)
+    Ref.write(bufferSize, amountFilled)
+    Ref.write(bufferIndex, 0)
     
     if amountFilled == 0 then
         EOF
@@ -59,24 +60,24 @@ refill(Parser({fileDescriptor, buffer, bufferSize, bufferIndex})) = {
 
 advance : (Parser, Int) -> ()
 advance(Parser({fileDescriptor, buffer, bufferSize, bufferIndex}) as parser, amount) = {
-    let currentIndex = unsafeReadMutableArray(bufferIndex, 0)
-    let currentSize = unsafeReadMutableArray(bufferSize, 0)
+    let currentIndex = Ref.read(bufferIndex)
+    let currentSize = Ref.read(bufferSize)
     if currentIndex + amount > currentSize then {
         match refill(parser) {
             EOF -> ()
             NonEOF -> advance(parser, amount - (currentSize - currentIndex))
         }
     } else {
-        unsafeWriteMutableArray(bufferIndex, 0, currentIndex + amount)
+        Ref.write(bufferIndex, currentIndex + amount)
     }
 }
 
 peekRemainingAsString : Parser -> String
 peekRemainingAsString(Parser({fileDescriptor, buffer, bufferSize, bufferIndex})) = {
-    let size = unsafeReadMutableArray(bufferSize, 0)
-    let index = unsafeReadMutableArray(bufferIndex, 0)
+    let size = Ref.read(bufferSize)
+    let index = Ref.read(bufferIndex)
     let copiedLength = size - index
-    let newArray = replicateArray(copiedLength, 0u8)
+    let newArray = replicateMutableArray(copiedLength, 0u8)
     copyMutableArray({ 
             targetArray = newArray, 
             targetOffset = 0, 

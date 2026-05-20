@@ -1,5 +1,5 @@
 
-import internal:Internal (unsafeFreezeArray, replicateArray, unsafeWriteMutableArray, unsafeArrayContents, nullPointer)
+import internal:Internal (unsafeFreezeArray, replicateMutableArray, unsafeWriteMutableArray, unsafeArrayContents, nullPointer)
 import std:IO/Posix/FileDescriptor (FileDescriptor)
 
 import meridian:Socket/Raw as Raw
@@ -33,7 +33,7 @@ makeINAnyAddress(port) = {
     -- sockaddr_in is 16 bytes so we need 8 UInt16s
     -- We initialize this to zeroes so taht sin_addr is zero
     -- and we don't just need to deal with 16 bit values
-    let array = replicateArray(8, 0u16)
+    let array = replicateMutableArray(8, 0u16)
 
     -- This is always AF_INET = 2.
     unsafeWriteMutableArray(array, 0, 2u16)
